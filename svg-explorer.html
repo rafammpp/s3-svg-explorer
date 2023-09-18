@@ -57,6 +57,15 @@
     <script>
         var svg_type_select = document.querySelector('.svg-type');
         var svg_color_select = document.querySelector('.svg-color');
+        
+        function set_clipboard(image_url){
+            let image = '<!-- {"sentinel":"story-elements","items":[{"opacity":100,"flip":{"vertical":false,"horizontal":false},"rotationAngle":0,"lockAspectRatio":false,"scale":100,"focalX":50,"focalY":50,"resource":{"type":"image","mimeType":"image/jpeg","width":960,"height":540,"sizes":{},"isPlaceholder":false,"isExternal":true,"needsProxy":false,"src":"' + image_url + '","id":"3ad3a4ed-93b3-4703-8c6b-f2f2600ab60a","alt":"shutterstock_1657938115_20200710092823787592_20200724205936535230.jpg","baseColor":"#d5c8b6"},"type":"image","x":48,"y":340,"width":330,"height":185,"mask":{"type":"rectangle","showInLibrary":true,"name":"Rectangle","path":"M 0,0 1,0 1,1 0,1 0,0 Z","ratio":1,"supportsBorder":true},"id":"e4eb3823-f5f1-4ea0-b185-d0eadddcca87"}],"animations":[],"groups":{}} --><div style="position:absolute;width:266.66667%;height:100%;left:-83.33333%;top:0%" data-leaf-element="true"><amp-img layout="fill" src="'+ image_url + '"></amp-img></div>';
+
+            let blob = new Blob([image], { type: "text/html"});
+            const data = [new ClipboardItem({ "text/html": blob })];
+            navigator.clipboard.write(data);
+        }
+
 
         function set_background(select){
             let font_color = 'white';
@@ -185,7 +194,15 @@
                 // Remove any invalid XML tags as per http://validator.w3.org
                 svg.removeAttribute('xmlns:a');
                 svg.querySelector('path').style = `fill: ${svg_color_select.value}`;
-                container.appendChild(svg);
+
+                let a = document.createElement('a');
+                a.addEventListener('click', event => {
+                    event.preventDefault();
+                    set_clipboard(url);
+                });
+                a.href = url;
+                a.appendChild(svg);
+                container.appendChild(a);
             });
         }
     </script>
