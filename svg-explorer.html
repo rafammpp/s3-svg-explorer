@@ -3,29 +3,69 @@
 <head>
     <title>SVGs</title>
     <meta charset="utf-8">
+    <style>
+        body {
+            background-color: #666;
+            color: #fff;
+        }
+        
+        .svg-container {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        div {
+            max-width: 100%;
+        }
+        svg {
+            width: 100px;
+        }
+    </style>
 </head>
 <body>
     <div class="container">
         <div class="header">
-            <h1>SVGs</h1>
+            <h1>SVG Explorer</h1>
         </div>
         <div class="content">
-            <div class="svg-list">
-                <select></select>
+            <div>
+                <select class="svg-type" onchange="show_svgs(this)">
+                    <option value="">------</option>
+                </select>
+                <select class="svg-color" onchange="set_fill_color(this)">
+                    <option value="#FFFFFF">Blanco</option>
+                    <option value="#000000">Negro</option>
+                    <option value="#F0F0F0">Stone</option>
+                    <option value="#FAC306">Kind Yellow</option>
+                    <option value="#2FAD69">Jade</option>
+                    <option value="#BE0059">Rose Red</option>
+                    <option value="#2F7EB6">Steel Blue</option>
+                    <option value="#E83323">Chili Red</option>
+                </select>
+                <label for="background-color">Background Color:</label>
+                <select name="background-color" class="background-color" onchange="set_background(this)">
+                    <option value="#666">Gris</option>
+                    <option value="black">Negro</option>
+                    <option value="white">Blanco</option>
+                </select>
             </div>
-            <div class="svg-container">
-                <!-- <div class="svg-container__svg">
-                    <svg id="svg" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
-                        <circle cx="50" cy="50" r="50" fill="#000000"/>
-                    </svg>
-                </div>
-                <div class="svg-container__color">
-                    <input type="color" id="color" value="#000000">
-                </div> -->
-            </div>
+            <div class="svg-container"></div>
         </div>
     </div>
     <script>
+        var svg_type_select = document.querySelector('.svg-type');
+        var svg_color_select = document.querySelector('.svg-color');
+
+        function set_background(select){
+            let font_color = 'white';
+            if(select.value == 'white')
+                font_color = 'black';
+
+            document.querySelector('body').style = `background-color:${select.value}; color:${font_color}`;
+        }
+
         function xmlToJson(xml) {
             if (typeof xml === 'string') {
                 parser = new DOMParser();
@@ -75,10 +115,16 @@
             return obj;
         }
         
-        function getIndexUrl(bucket, region, prefix) {
-            // http://yourbucketname.s3.amazonaws.com/?delimiter=/&prefix=downloads/' (only http)
-            // https://s3.ap-south-1.amazonaws.com/yourbucketname/?delimiter=/&prefix=downloads/
+        function getIndexUrl(prefix) {
+            let bucket = 'youth-svgs';
+            let region = 'eu-west-1';
             return 'https://s3.' + region + '.amazonaws.com/' + bucket + '/?delimiter=/&prefix=' + prefix;
+        }
+
+        function get_s3_url(key){
+            let bucket = 'youth-svgs';
+            let region = 'eu-west-1';
+            return 'https://s3.' + region + '.amazonaws.com/' + bucket + '/' + key;
         }
         
         function getIndexJson(xml) {
@@ -91,108 +137,88 @@
         
             return list;
         }
+        
+        function show_svgs(element){
+            let svg_type = element.value;
+            
+            // hide all containers of svgs
+            document.querySelectorAll('.svg-container div').forEach(div => div.style = 'display: none;');
+            if (svg_type == '')
+                return;
+            // show selected svgs
+            let svg_containers = document.querySelectorAll(`.${svg_type}, .${svg_type} div`);
+            for(let div of svg_containers){
+                div.style = '';
+                if (div.querySelector('svg') != null)
+                    continue;
+
+                let prefix = div.getAttribute('prefix');
+                fetch(getIndexUrl(prefix))
+                .then(response => response.text())
+                .then(getIndexJson)
+                .then(json_response => {
+                    for (let dict of json_response){
+                        if('key' in dict){
+                            inject_svg(get_s3_url(dict['key']), div);
+                        }
+                    }
+                })
+            }
+            svg_containers[0].parentElement.style = '';
+        }
+
+        function set_fill_color(element){
+            let color = element.value;
+            document.querySelectorAll('svg path').forEach(path => path.style = `fill: ${color}`);
+        }
+
+        function inject_svg(url, container){
+            fetch(url)
+            .then(response => response.text())
+            .then(text => {
+                var parser = new DOMParser();
+                var xmlDoc = parser.parseFromString(text, "text/xml");
+
+                // Get the SVG tag, ignore the rest
+                var svg = xmlDoc.getElementsByTagName('svg')[0];
+
+                // Remove any invalid XML tags as per http://validator.w3.org
+                svg.removeAttribute('xmlns:a');
+                svg.querySelector('path').style = `fill: ${svg_color_select.value}`;
+                container.appendChild(svg);
+            });
+        }
     </script>
     <script type="module">
-        let bucket = 'youth-svgs';
-        let region = 'eu-west-1';
-        var json_index = {};
-        let select = document.querySelector('.svg-list select');
         let svg_container = document.querySelector('.svg-container');
 
-        fetch(getIndexUrl(bucket, region, prefix))
-            .then(response => response.text())
-            .then(getIndexJson)
-            .then(json_response => {
-                for (let dict of json_response)
-                    if('prefix' in dict)
-                        json_index[dict['prefix']] = {};
-            })
-            .then(() => {
-                for(let [key, value] of Object.entries(json_index)){
-                    let option = document.createElement('option');
-                    option.value = key;
-                    option.innerHTML = key;
-                    select.add(option);
-                }
-            });
-              
-
-        function fill_json(json, prefix){
-            return fetch(getIndexUrl(bucket, region, prefix))
+        function explore_s3(prefix, container){
+            return fetch(getIndexUrl(prefix))
             .then(response => response.text())
             .then(getIndexJson)
             .then(json_response => {
                 for (let dict of json_response){
                     if('prefix' in dict){
-                        json[dict['prefix']] = {};
-                        fill_json(json[dict['prefix']], dict['prefix']);
-                    }
-                    else if('key' in dict){
-                        try {
-                            json['svgs'].push(dict['key']);
-                        } catch (TypeError) {
-                            json['svgs'] = [dict['key']];
-                        }
+                        let option = document.createElement('option');
+                        option.value = dict['prefix'].replaceAll('/', '_');
+                        option.innerHTML = dict['prefix'];
+                        svg_type_select.add(option);
+
+                        let div = document.createElement('div');
+                        div.classList.add(dict['prefix'].replaceAll('/', '_'));
+                        div.setAttribute('prefix', dict['prefix']);
+                        let h2 = document.createElement('h2');
+                        h2.innerHTML = dict['prefix'];
+                        div.appendChild(h2);
+                        container.appendChild(div);
+                        explore_s3(dict['prefix'], div);
                     }
                 }
-            }).then(() => {
-                fill_div(json, svg_container);
-                console.log(Object.keys( json ).length );
             })
         }
 
-        await fill_json(json_index, '');
-        console.log(json_index);
-        
-        // Fill select with options
-        for(let [key, value] of Object.entries(json_index)){
-            if(key != 'svgs'){
-                let option = document.createElement('option');
-                option.value = key;
-                option.innerHTML = key;
-                select.add(option);
-            }
-        }
-
-        // Fill svg_container with svgs
-        function fill_div(json){
-            for(let [key, value] of Object.entries(json)){
-                if(key != 'svgs'){
-                    let h2 = document.createElement('h2');
-                    h2.innerHTML = key;
-                    svg_container.appendChild(h2);
-                    fill_div(value, svg_container);
-                } else {
-                    let div = document.createElement('div');
-                    for(const svg_path of value){
-                        div.classList.add('svg-container__svg');
-                        let svg_element = document.createElement('svg');
-                        svg_element.setAttribute('src', 'https://s3.' + region + '.amazonaws.com/' + bucket + '/' + svg_path);
-                        div.appendChild(svg_element);
-                    }
-                    svg_container.appendChild(div);
-                }
-            }
-        }
-        // fill_div(json_index, svg_container);
-
-
-        // /* description */
-        
-        // getIndexUrl(bucket, region, prefix) - gives the url for directory index api call
-        // getIndexJson(xml) - accepts directory index xml data and gives required json 
-        // [ { prefix }, { eTag, key, lastModified, size, storageClass } ]
-        
-        // /* example usage */
-        
-        // var bucket = 'yourbucketname';
-        // var region = 'ap-south-1';
-        // var prefix = 'downloads/'; // must have trailing slash or can be empty string
-        
-        // fetch(getIndexUrl(bucket, region, prefix))
-        //   .then(res => res.text())
-        //   .then(getIndexJson)
-        //   .then(j => console.log(j));
+        await explore_s3('', document.querySelector('.svg-container'));
+        show_svgs(svg_type_select);
     </script>
 </body>
 </html>
