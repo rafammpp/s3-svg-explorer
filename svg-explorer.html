@@ -5,8 +5,8 @@
     <meta charset="utf-8">
     <style>
         body {
-            background-color: #666;
-            color: #fff;
+            background-color: white;
+            color: black;
         }
         
         .svg-container {
@@ -34,21 +34,11 @@
                 <select class="svg-type" onchange="show_svgs(this)">
                     <option value="">------</option>
                 </select>
-                <select class="svg-color" onchange="set_fill_color(this)">
-                    <option value="#FFFFFF">Blanco</option>
-                    <option value="#000000">Negro</option>
-                    <option value="#F0F0F0">Stone</option>
-                    <option value="#FAC306">Kind Yellow</option>
-                    <option value="#2FAD69">Jade</option>
-                    <option value="#BE0059">Rose Red</option>
-                    <option value="#2F7EB6">Steel Blue</option>
-                    <option value="#E83323">Chili Red</option>
-                </select>
                 <label for="background-color">Background Color:</label>
                 <select name="background-color" class="background-color" onchange="set_background(this)">
-                    <option value="#666">Gris</option>
-                    <option value="black">Negro</option>
-                    <option value="white">Blanco</option>
+                    <option value="white">White</option>
+                    <option value="black">Black</option>
+                    <option value="#666">Grey</option>
                 </select>
             </div>
             <div class="svg-container"></div>
@@ -66,85 +56,12 @@
             navigator.clipboard.write(data);
         }
 
-
         function set_background(select){
             let font_color = 'white';
             if(select.value == 'white')
                 font_color = 'black';
 
             document.querySelector('body').style = `background-color:${select.value}; color:${font_color}`;
-        }
-
-        function xmlToJson(xml) {
-            if (typeof xml === 'string') {
-                parser = new DOMParser();
-                xml = parser.parseFromString(xml, 'text/xml');
-            }
-        
-            // Create the return object
-            var obj = {};
-        
-            if (xml.nodeType == 1) {
-                // element
-                // do attributes
-                if (xml.attributes.length > 0) {
-                    obj['@attributes'] = {};
-                    for (var j = 0; j < xml.attributes.length; j++) {
-                        var attribute = xml.attributes.item(j);
-                        obj['@attributes'][attribute.nodeName] = attribute.nodeValue;
-                    }
-                }
-            } else if (xml.nodeType == 3) {
-                // text
-                obj = xml.nodeValue;
-            }
-        
-            // do children
-            // If just one text node inside
-            if (xml.hasChildNodes() && xml.childNodes.length === 1 && xml.childNodes[0].nodeType === 3) {
-                obj = xml.childNodes[0].nodeValue;
-            } else if (xml.hasChildNodes()) {
-                for (var i = 0; i < xml.childNodes.length; i++) {
-                    var item = xml.childNodes.item(i);
-                    var nodeName = item.nodeName;
-                    // camelCase
-                    nodeName = nodeName.charAt(0).toLowerCase() + nodeName.slice(1);
-                    if (typeof obj[nodeName] == 'undefined') {
-                        obj[nodeName] = xmlToJson(item);
-                    } else {
-                        if (typeof obj[nodeName].push == 'undefined') {
-                            var old = obj[nodeName];
-                            obj[nodeName] = [];
-                            obj[nodeName].push(old);
-                        }
-                        obj[nodeName].push(xmlToJson(item));
-                    }
-                }
-            }
-            return obj;
-        }
-        
-        function getIndexUrl(prefix) {
-            let bucket = 'youth-svgs';
-            let region = 'eu-west-1';
-            return 'https://s3.' + region + '.amazonaws.com/' + bucket + '/?delimiter=/&prefix=' + prefix;
-        }
-
-        function get_s3_url(key){
-            let bucket = 'youth-svgs';
-            let region = 'eu-west-1';
-            return 'https://s3.' + region + '.amazonaws.com/' + bucket + '/' + key;
-        }
-        
-        function getIndexJson(xml) {
-            var json = xmlToJson(xml);
-            var list = [];
-            if (json.listBucketResult.commonPrefixes)
-                list = list.concat(json.listBucketResult.commonPrefixes);
-            if (json.listBucketResult.contents)
-                list = list.concat(json.listBucketResult.contents);
-        
-            return list;
         }
         
         function show_svgs(element){
@@ -162,16 +79,10 @@
                     continue;
 
                 let prefix = div.getAttribute('prefix');
-                fetch(getIndexUrl(prefix))
-                .then(response => response.text())
-                .then(getIndexJson)
-                .then(json_response => {
-                    for (let dict of json_response){
-                        if('key' in dict){
-                            inject_svg(get_s3_url(dict['key']), div);
-                        }
-                    }
-                })
+                
+                for (let svg of manifest_json[prefix]){
+                    inject_svg(svg, div);
+                }
             }
             svg_containers[0].parentElement.style = '';
         }
@@ -182,6 +93,7 @@
         }
 
         function inject_svg(url, container){
+            url = window.location.origin + '/' + url;
             fetch(url)
             .then(response => response.text())
             .then(text => {
@@ -193,7 +105,7 @@
 
                 // Remove any invalid XML tags as per http://validator.w3.org
                 svg.removeAttribute('xmlns:a');
-                svg.querySelector('path').style = `fill: ${svg_color_select.value}`;
+                // svg.querySelector('path').style = `fill: ${svg_color_select.value}`;
 
                 let a = document.createElement('a');
                 a.addEventListener('click', event => {
@@ -205,37 +117,31 @@
                 container.appendChild(a);
             });
         }
-    </script>
-    <script type="module">
-        let svg_container = document.querySelector('.svg-container');
+    
+        let container = document.querySelector('.svg-container');
+        var manifest_json;
 
-        function explore_s3(prefix, container){
-            return fetch(getIndexUrl(prefix))
-            .then(response => response.text())
-            .then(getIndexJson)
-            .then(json_response => {
-                for (let dict of json_response){
-                    if('prefix' in dict){
-                        let option = document.createElement('option');
-                        option.value = dict['prefix'].replaceAll('/', '_');
-                        option.innerHTML = dict['prefix'];
-                        svg_type_select.add(option);
+        fetch('manifest.json')
+        .then(response => response.json())
+        .then(json_response => {
+            manifest_json = json_response;
 
-                        let div = document.createElement('div');
-                        div.classList.add(dict['prefix'].replaceAll('/', '_'));
-                        div.setAttribute('prefix', dict['prefix']);
-                        let h2 = document.createElement('h2');
-                        h2.innerHTML = dict['prefix'];
-                        div.appendChild(h2);
-                        container.appendChild(div);
-                        explore_s3(dict['prefix'], div);
-                    }
-                }
-            })
-        }
+            for(let dir of Object.keys(json_response)){
+                let option = document.createElement('option');
+                option.value = dir.replaceAll('/', '_');
+                option.innerHTML = dir;
+                svg_type_select.add(option);
 
-        await explore_s3('', document.querySelector('.svg-container'));
-        show_svgs(svg_type_select);
+                let div = document.createElement('div');
+                div.classList.add(dir.replaceAll('/', '_'));
+                div.setAttribute('prefix', dir);
+                let h2 = document.createElement('h2');
+                h2.innerHTML = dir;
+                div.appendChild(h2);
+                container.appendChild(div);            
+            }
+            show_svgs(svg_type_select);
+        });
     </script>
 </body>
 </html>

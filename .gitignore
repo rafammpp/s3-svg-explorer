@@ -1,3 +1,4 @@
 svgs
 *.svg
 .vscode
+*.json
